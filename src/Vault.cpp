@@ -20,7 +20,24 @@ static bool writeAllText(const std::string& path, const std::string& data) {
 	return !!ofs;
 }
 
+static void wipeString(std::string& s) {
+	if (!s.empty()) {
+		Crypto::secureZero(s.data(), s.size());
+		s.clear();
+		s.shrink_to_fit();
+	}
+}
+
 Vault::Vault(std::string path) : filePath(std::move(path)) {}
+
+Vault::~Vault() {
+	if (!key.empty()) Crypto::secureZero(key.data(), key.size());
+	if (!nonce.empty()) Crypto::secureZero(nonce.data(), nonce.size());
+
+	for (auto& e : entries) {
+		wipeString(e.password);
+	}
+}
 
 bool Vault::initNew(const std::string& masterPassword) {
 	kdf_.salt = Crypto::randomBytes(crypto_pwhash_SALTBYTES);

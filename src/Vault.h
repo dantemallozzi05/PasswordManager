@@ -37,6 +37,7 @@ private:
 	std::vector<unsigned char> key;
 	std::vector<unsigned char> nonce;
 	bool hasKey_ = false;
+	std::string lastError_; // stores most recent error msg
 	
 
 	// re-derive key with current kdf and provided master. 
@@ -49,6 +50,7 @@ private:
 public:
 
 	explicit Vault(std::string path);
+	~Vault();
 
 	// create new empty vault with fresh salt, derives a key and writes file
 	bool initNew(const std::string& masterPassword);
@@ -64,6 +66,8 @@ public:
 	void addEntry(const Entry& entry);
 	const std::vector<Entry>& list() const { return entries; }
 
-	const std::vector<Entry>& getEntries() const;
+	const std::vector<Entry>& getEntries() const { return entries; }
+
+	const std::string& getLastError() const { return lastError_; }
 
 };
