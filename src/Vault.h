@@ -29,6 +29,23 @@ inline void from_json(const nlohmann::json& j, Entry& e) {
 
 class Vault {
 
+private:
+
+	std::string filePath;
+	std::vector<Entry> entries;
+	Crypto::KdfParams kdf_;
+	std::vector<unsigned char> key;
+	std::vector<unsigned char> nonce;
+	bool hasKey_ = false;
+	
+
+	// re-derive key with current kdf and provided master. 
+	bool deriveKey(const std::string& masterPassword);
+
+	// helpers to deserialized the vault header / body
+	nlohmann::json makeHeaderJson() const;
+	bool parseHeaderFromJson(const nlohmann::json& root);
+
 public:
 
 	explicit Vault(std::string path);
@@ -44,27 +61,7 @@ public:
 	bool save() const;
 
 	// simple CRUD helpers
-	void addEntry(const Entry& e);
-	const std::vector<Entry>& list() const { return entries_; }
-	bool isKeyReady() const { return hasKey_; }
-
-
-
-private:
-
-	std::string filePath;
-	std::vector<Entry> entries;
-	std::vector<unsigned char> key;
-	std::vector<unsigned char> nonce;
-	bool hasKey_ = false;
-	Crypto::KdfParams kdf_;
-
-	// re-derive key with current kdf and provided master. 
-	bool deriveKey(const std::string& masterPassword);
-
-	// helpers to deserialized the vault header / body
-	nlohmann::json makeHeaderJson() const;
-	bool parseHeaderFromJson(const nlohmann::json& hdr);
-
+	void addEntry(const Entry& entry);
+	const std::vector<Entry>& list() const { return entries; }
 
 };

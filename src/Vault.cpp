@@ -2,6 +2,8 @@
 #include "crypto.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <iterator>
+#include <sodium.h>
 
 static bool readAllText(const std::string& path, std::string& out) {
 	std::ifstream ifs(path, std::ios::binary);
@@ -10,17 +12,15 @@ static bool readAllText(const std::string& path, std::string& out) {
 	return true;
 }
 
-static bool writeAllText(const std::string& path, const std::string data) {
-	std::ofstream ofs(path, std::ios::battery | std::ios::trunc);
+static bool writeAllText(const std::string& path, const std::string& data) {
+	std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
 	if (!ofs) return false;
 
 	ofs.write(data.data(), static_cast<std::streamsize>(data.size()));
 	return !!ofs;
 }
 
-Vault::Vault(std::string path) : filePath(std::move(path)) {
-	Crypto::init(); 
-}
+Vault::Vault(std::string path) : filePath(std::move(path)) {}
 
 bool Vault::initNew(const std::string& masterPassword) {
 	kdf_.salt = Crypto::randomBytes(crypto_pwhash_SALTBYTES);
@@ -41,13 +41,12 @@ bool Vault::deriveKey(const std::string& masterPassword) {
 		return true;
 }
 
-bool Vault::addEntry(const Entry& entry) {
+void Vault::addEntry(const Entry& entry) {
 	entries.push_back(entry);
-	return true;
 }
 
 bool Vault::save() const {
-	if (!hasKey) return false;
+	if (!hasKey_) return false;
 
 	nlohmann::json arr = nlohmann::json::array();
 	for (const auto& e : entries) arr.push_back(e);
@@ -59,12 +58,12 @@ bool Vault::save() const {
 	if (!Crypto::encrypt(key, nonce, plaintext, ctB64)) return false;
 
 	nlohmann::json root = makeHeaderJson();
-	root["ciphertext)b64"] = ctB64;
+	root["ciphertext_b64"] = ctB64;
 
 	return writeAllText(filePath, root.dump(2));
 }
 
-bool Vault::load() {
+bool Vault::load(const std::string& masterPassword) {
 	std::string text;
 	if (!readAllText(filePath, text)) return false;
 
@@ -79,7 +78,7 @@ bool Vault::load() {
 	if (ctB64.empty()) { entries.clear(); return true; }
 
 	std::string plaintext;
-	if (!Crypto::decrypt(key, nonce, encrypted, plaintext)) {
+	if (!Crypto::decrypt(key, nonce, ctB64, plaintext)) {
 		return false;
 	}
 
@@ -94,6 +93,19 @@ bool Vault::load() {
 	return true;
 }
 
+nlohmann::json Vault::makeHeaderJson() const {
+	nlohmann::json hdr;
+	hdr["version"] = 1;
+
+	nlohmann::json k;
+	k["opslimit"] = kdf_.opslimit;
+	k["memlimit"] = kdf_.memlimit;
+	k["salt_b64"] = Crypto::b64encode(kdf_.salt);
+	hdr["kdf"] = k;
+
+
+}
+
 bool Vault::parseHeaderFromJson(const nlohmann::json& root) {
 	try {
 		if (root.value("version", 0) != 1) return false;
@@ -102,13 +114,13 @@ bool Vault::parseHeaderFromJson(const nlohmann::json& root) {
 		kdf_.opslimit = kdfJ.at("opslimit").get<unsigned long long>();
 		kdf_.memlimit = kdfJ.at("memlimit").get<std::size_t>();
 
-		auto salt864 = kdfJ.at("salt.b64").get<std::string>();
+		auto saltB64 = kdfJ.at("salt_b64").get<std::string>();
 		kdf_.salt = Crypto::b64decode(saltB64);
-
 		if (kdf_.salt.size() != crypto_pwhash_SALTBYTES) return false;
 
+
 		auto nonceB64 = root.at("nonce_b64").get<std::string>();
-		nonce = Crypto::b64decode(nonce864);
+		nonce = Crypto::b64decode(nonceB64);
 		if (nonce.size() != crypto_aead_xchacha20poly1305_ietf_NPUBBYTES) return false;
 
 		return true;

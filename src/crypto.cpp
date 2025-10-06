@@ -74,7 +74,7 @@ namespace Crypto {
 
 	}
 	// encrypt plaintext using XChaCha20-Poly1305 AEAD.
-	bool encrypt(const std::vector<unsigned char>& key, const std::vector<unsigned char> nonce24, const std::string plaintext, std::string& outCiphertext864) {
+	bool encrypt(const std::vector<unsigned char>& key, const std::vector<unsigned char> nonce24, const std::string& plaintext, std::string& outCiphertext864) {
 		if (!ensure_sodium_init()) return false;
 		if (key.size() != crypto_aead_xchacha20poly1305_ietf_KEYBYTES) return false;
 
