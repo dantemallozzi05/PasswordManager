@@ -103,7 +103,9 @@ nlohmann::json Vault::makeHeaderJson() const {
 	k["salt_b64"] = Crypto::b64encode(kdf_.salt);
 	hdr["kdf"] = k;
 
+	hdr["nonce_b64"] = Crypto::b64encode(nonce); 
 
+	return hdr;
 }
 
 bool Vault::parseHeaderFromJson(const nlohmann::json& root) {
@@ -130,6 +132,6 @@ bool Vault::parseHeaderFromJson(const nlohmann::json& root) {
 	}
 }
 
-std::vector<Entry> Vault::getEntries() const {
+const std::vector<Entry>& Vault::getEntries() const {
 	return entries;
 }

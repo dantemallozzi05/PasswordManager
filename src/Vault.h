@@ -64,4 +64,6 @@ public:
 	void addEntry(const Entry& entry);
 	const std::vector<Entry>& list() const { return entries; }
 
+	const std::vector<Entry>& getEntries() const;
+
 };
