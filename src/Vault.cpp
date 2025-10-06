@@ -65,12 +65,29 @@ bool Vault::save() const {
 }
 
 bool Vault::load() {
-	std::ifstream ifs(filePath, std::ios::binary);
-	if (!ifs.is_open()) return false;
+	std::string text;
+	if (!readAllText(filePath, text)) return false;
 
-	std::string encrypted((std::istreambuf_iterator<char>(ifs)), {});
+	nlohmann::json root;
+	try { root = nlohmann::json::parse(text); }
+	catch (...) { return false; }
+
+	if (!parseHeaderFromJson(root)) return false;
+	if (!deriveKey(masterPassword)) return false;
+
+	const std::string ctB64 = root.value("ciphertext_b64", "");
+	if (ctB64.empty()) { entries.clear(); return true; }
+
 	std::string plaintext;
 	if (!Crypto::decrypt(key, nonce, encrypted, plaintext)) {
+		return false;
+	}
+
+	try {
+		auto arr = nlohmann::json::parse(plaintext);
+		entries = arr.get<std::vector<Entry>>();
+	}
+	catch (...) {
 		return false;
 	}
 
