@@ -10,9 +10,12 @@ find_package(nlohmann_json CONFIG REQUIRED)
 
 # Executable
 add_executable(PasswordManager
-    PasswordManager.cpp
+    src/main.cpp
     src/crypto.cpp 
-)
+    src/Vault.cpp 
+    src/Vault.h 
+    src/crypto.h
+ )
 
 # Link libraries
 target_link_libraries(PasswordManager PRIVATE
