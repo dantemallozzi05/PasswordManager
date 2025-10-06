@@ -1,0 +1,37 @@
+# Build and output folders
+/out/
+/build/
+/CMakeFiles/
+CMakeCache.txt
+
+# Visual Studio files
+.vs/
+*.vcxproj*
+*.user
+*.suo
+*.ipch
+*.db
+*.db-shm
+*.db-wal
+*.opendb
+*.VC.db*
+
+# Logs, settings, temp
+*.log
+*.tlog
+*.tmp
+*.bak
+*.backup.json
+*.json.user
+
+# Binaries
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+
+# CMake generated files
+CMakeSettings.json
+CMakeWorkspaceSettings.json
+CMakeOverview*
