@@ -11,7 +11,7 @@ static std::string prompt(const std::string& label) {
 }
 
 static void printUsage(const char* exe) {
-	std::cout << "Usage: \n"
+	std::cout << "Usage: pm \n"
 		<< "  " << exe << " init <vault.json>\n"
 		<< "  " << exe << " add  <vault.json>\n"
 		<< "  " << exe << " list <vault.json>\n";
@@ -23,31 +23,47 @@ int main(int argc, char** argv) {
 	const std::string cmd = argv[1];
 	const std::string path = argv[2];
 
-	// initialize brand new vault
-	if (cmd == "list") {
-		const std::string master = prompt("Master password: ");
+	if (cmd == "init") {
+		Vault v(path); // new vault at desired filepath
 
-		Vault v(path);
-		if (!v.load(master)) {
-			std::cerr << "Failed to load / decrypt vault. Wrong password, or corrupt file.\n";
-			return 1;
-		}
+		std::string master = prompt("Create master password: ");
 
-		const auto& items = v.list();
-		if (items.empty()) {
-			std::cout << "(no entries)\n";
-			return 0;
-		}
-
-		std::cout << "Entries (" << items.size() << "):\n";
-		for (const auto& it : items) {
-			std::cout << "- site: " << it.site
-				<< " | user: " << it.username
-				<< " | pass: " << it.password << "\n";
-		}
+		if (!v.initNew(master)) { std::cerr << v.getLastError() << std::endl; return 1; }
+		std::cout << "Vault successfully created." << std::endl;
 		return 0;
 	}
 
-	printUsage(argv[0]);
+	if (cmd == "add") {
+		Vault v(path);
+		std::string master = prompt("Enter master password: ");
+
+		if (!v.load(master)) { std::cerr << v.getLastError() << std::endl; return 1; }
+
+		// Prompt user to enter site name, their username and password.
+		// Add to vault
+		Entry e{ prompt("Site: "), prompt("Username: "), prompt("Password: ") };
+		v.addEntry(e);
+
+		if (!v.save()) { std::cerr << v.getLastError() << std::endl; return 1; }
+		std::cout << "Entry successfully saved.";
+		return 0;
+	}
+	// List vault entries
+	if (cmd == "list") {
+		
+		Vault v(path);
+
+		std::string master = prompt("Enter master password: ");
+
+		if (!v.load(master)) { std::cerr << v.getLastError() << std::endl; return 1; }
+		for (auto& e : v.getEntries()) {
+			std::cout << e.site << " | " << e.username << " | " << e.password << std::endl;
+		}
+		
+		return 0;
+
+	}
+	std::cerr << "Unknown command." << std::endl;
 	return 1;
+	
 }
