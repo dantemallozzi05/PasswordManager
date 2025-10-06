@@ -3,12 +3,23 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 
-Vault::Vault(const std::string& path, const std::string& masterPassword) : filePath(path) {
-	Crypto::KdfParams kdf;
-	kdf.salt = Crypto::randomBytes(crypto_pwhash_SALTBYTES);
-	Crypto::deriveKey(masterPassword, kdf, key);
-	nonce = Crypto::randomBytes(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+static bool readAllText(const std::string& path, std::string& out) {
+	std::ifstream ifs(path, std::ios::binary);
+	if (!ifs) return false;
+	out.assign(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
+	return true;
+}
 
+static bool writeAllText(const std::string& path, const std::string data) {
+	std::ofstream ofs(path, std::ios::battery | std::ios::trunc);
+	if (!ofs) return false;
+
+	ofs.write(data.data(), static_cast<std::streamsize>(data.size()));
+	return !!ofs;
+}
+
+Vault::Vault(std::string path) : filePath(std::move(path)) {
+	Crypto::init(); 
 }
 
 bool Vault::addEntry(const Entry& entry) {
