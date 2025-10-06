@@ -5,24 +5,28 @@
 #include <iterator>
 #include <sodium.h>
 
+// Read entire file contents into secure string
 static bool readAllText(const std::string& path, std::string& out) {
-	std::ifstream ifs(path, std::ios::binary);
+	std::ifstream ifs(path, std::ios::binary); // open file in binary mode
 	if (!ifs) return false;
-	out.assign(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>());
+
+	out.assign(std::istreambuf_iterator<char>(ifs), std::istreambuf_iterator<char>()); // read in all bytes
 	return true;
 }
 
+// Write entire string to file, overwriting existing content.
 static bool writeAllText(const std::string& path, const std::string& data) {
 	std::ofstream ofs(path, std::ios::binary | std::ios::trunc);
 	if (!ofs) return false;
 
-	ofs.write(data.data(), static_cast<std::streamsize>(data.size()));
+	ofs.write(data.data(), static_cast<std::streamsize>(data.size())); // write all bytes
 	return !!ofs;
 }
 
+// Securely wipe a string's contents from memory.
 static void wipeString(std::string& s) {
 	if (!s.empty()) {
-		Crypto::secureZero(s.data(), s.size());
+		Crypto::secureZero(s.data(), s.size()); // Overwrite memory if string isn't empty
 		s.clear();
 		s.shrink_to_fit();
 	}
@@ -30,19 +34,23 @@ static void wipeString(std::string& s) {
 
 Vault::Vault(std::string path) : filePath(std::move(path)) {}
 
+// securely wipe sensitive & personal data from memory
 Vault::~Vault() {
+	// wipe key / nonce
 	if (!key.empty()) Crypto::secureZero(key.data(), key.size());
 	if (!nonce.empty()) Crypto::secureZero(nonce.data(), nonce.size());
 
 	for (auto& e : entries) {
 		if (!e.password.empty()) {
-			Crypto::secureZero(e.password.data(), e.password.size());
+			Crypto::secureZero(e.password.data(), e.password.size()); // wipe password
 			e.password.clear();
 			e.password.shrink_to_fit();
 		}
 	}
 }
 
+
+// Initialize new vault with fresh salt / nonce, derives a key and saves
 bool Vault::initNew(const std::string& masterPassword) {
 	kdf_.salt = Crypto::randomBytes(crypto_pwhash_SALTBYTES);
 	if (!deriveKey(masterPassword)) return false;
@@ -52,8 +60,9 @@ bool Vault::initNew(const std::string& masterPassword) {
 	return save(); // return written header
 }
 
+// derive encryption key from master password
 bool Vault::deriveKey(const std::string& masterPassword) {
-	key.clear();
+	key.clear(); 
 		if (!Crypto::deriveKey(masterPassword, kdf_, key)) {
 			hasKey_ = false;
 			return false;
@@ -62,26 +71,28 @@ bool Vault::deriveKey(const std::string& masterPassword) {
 		return true;
 }
 
+// Add entry to vault
 void Vault::addEntry(const Entry& entry) {
 	entries.push_back(entry);
 }
 
+// Save vault to disk, encrypting its entries.
 bool Vault::save() const {
 
 	if (!hasKey_) {
 		lastError_ = "Key is not derived; call initNew() or load() first."; return false;
 	}
 
-	// serialize via plaintext
+	// serialize via plaintext to json
 	nlohmann::json arr = nlohmann::json::array();
 	for (const auto& e : entries) arr.push_back(e);
 	std::string plaintext = arr.dump();
 
 	const_cast<std::vector<unsigned char>&>(nonce) =
-	Crypto::randomBytes(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+	Crypto::randomBytes(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES); // new nonce generated
 
 
-	//Emcrypt, attach to header
+	// Encrypt, attach to header
 	std::string ctB64;
 	if (!Crypto::encrypt(key, nonce, plaintext, ctB64)) {
 		lastError_ = "Encryption failed.";
@@ -104,6 +115,7 @@ bool Vault::save() const {
 	return ok;
 }
 
+// Securely load vault from disk, derive key, and decrypt entries
 bool Vault::load(const std::string& masterPassword) {
 	std::string text;
 	if (!readAllText(filePath, text)) {
@@ -112,7 +124,7 @@ bool Vault::load(const std::string& masterPassword) {
 	}
 
 	nlohmann::json root;
-	try { root = nlohmann::json::parse(text); }
+	try { root = nlohmann::json::parse(text); } // parse json for decryption
 
 	catch (...) { lastError_ = "Vault is not valid JSON."; return false; }
 
@@ -152,14 +164,19 @@ bool Vault::load(const std::string& masterPassword) {
 	return true;
 }
 
+// JSON header creation storing vault contents
 nlohmann::json Vault::makeHeaderJson() const {
 	nlohmann::json hdr;
-	hdr["version"] = 1;
+	hdr["version"] = 1; // version
 
 	nlohmann::json k;
+
+	// KDF ops / memory limits
 	k["opslimit"] = kdf_.opslimit;
 	k["memlimit"] = kdf_.memlimit;
-	k["salt_b64"] = Crypto::b64encode(kdf_.salt);
+
+	// Salt and nonce, encoded as base64
+	k["salt_b64"] = Crypto::b64encode(kdf_.salt); 
 	hdr["kdf"] = k;
 
 	hdr["nonce_b64"] = Crypto::b64encode(nonce); 
@@ -167,6 +184,7 @@ nlohmann::json Vault::makeHeaderJson() const {
 	return hdr;
 }
 
+// Parsing the header 
 bool Vault::parseHeaderFromJson(const nlohmann::json& root) {
 	try {
 		if (root.value("version", 0) != 1) return false;

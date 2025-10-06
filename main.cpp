@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
 	const std::string cmd = argv[1];
 	const std::string path = argv[2];
 
-	// initialize brnd new vault
+	// initialize brand new vault
 	if (cmd == "list") {
 		const std::string master = prompt("Master password: ");
 
