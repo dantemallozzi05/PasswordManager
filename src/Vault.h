@@ -37,7 +37,7 @@ private:
 	std::vector<unsigned char> key;
 	std::vector<unsigned char> nonce;
 	bool hasKey_ = false;
-	std::string lastError_; // stores most recent error msg
+	mutable std::string lastError_; // stores most recent error msg
 	
 
 	// re-derive key with current kdf and provided master. 

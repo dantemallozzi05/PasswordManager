@@ -35,7 +35,11 @@ Vault::~Vault() {
 	if (!nonce.empty()) Crypto::secureZero(nonce.data(), nonce.size());
 
 	for (auto& e : entries) {
-		wipeString(e.password);
+		if (!e.password.empty()) {
+			Crypto::secureZero(e.password.data(), e.password.size());
+			e.password.clear();
+			e.password.shrink_to_fit();
+		}
 	}
 }
 
@@ -63,19 +67,17 @@ void Vault::addEntry(const Entry& entry) {
 }
 
 bool Vault::save() const {
-	{
-		if (!hasKey_) {
-			lastError_ = "Key is not derived; call initNew() or load() first."; return false;
-		}
+
+	if (!hasKey_) {
+		lastError_ = "Key is not derived; call initNew() or load() first."; return false;
+	}
 
 	// serialize via plaintext
 	nlohmann::json arr = nlohmann::json::array();
 	for (const auto& e : entries) arr.push_back(e);
 	std::string plaintext = arr.dump();
 
-
-	const std::string plaintext = arr.dump();
-	const_cast<std::vector<unsigned char>&>(nonce) = Crypto::randomBytes(crypto_aead_xchacha20poly1305_ietf_PUBBYTES);
+	const_cast<std::vector<unsigned char>&>(nonce) =
 	Crypto::randomBytes(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 
 
@@ -119,22 +121,32 @@ bool Vault::load(const std::string& masterPassword) {
 		return false;
 	}
 		
-	if (!derivieKey(masterPassword)) {
+	if (!deriveKey(masterPassword)) {
 		lastError_ = "Key derivation failed (argon2id).";
 		return false;
 	}
 
-	const std::string ctB64 = root.value("ciphertext_b64", "");
+	std::string ctB64 = root.value("ciphertext_b64", "");
 
 	if (ctB64.empty()) { entries.clear(); return true; }
 
 	std::string plaintext;
 	if (!Crypto::decrypt(key, nonce, ctB64, plaintext)) {
-		lastError_ = "Decrypted data isn't valid JSON.";
-
+		lastError_ = "Decryption failed. Wrong password or corrupted file.";
 		if (!plaintext.empty()) Crypto::secureZero(plaintext.data(), plaintext.size());
 		return false;
 	}
+
+	try {
+		auto arr = nlohmann::json::parse(plaintext);
+		entries = arr.get<std::vector<Entry>>();
+	}
+	catch (...) {
+		lastError_ = "Decrypted data isn't valid JSON.";
+		if (!plaintext.empty()) Crypto::secureZero(plaintext.data(), plaintext.size());
+		return false;
+	}
+
 
 	if (!plaintext.empty()) Crypto::secureZero(plaintext.data(), plaintext.size());
 	return true;
@@ -163,12 +175,12 @@ bool Vault::parseHeaderFromJson(const nlohmann::json& root) {
 		kdf_.opslimit = kdfJ.at("opslimit").get<unsigned long long>();
 		kdf_.memlimit = kdfJ.at("memlimit").get<std::size_t>();
 
-		auto saltB64 = kdfJ.at("salt_b64").get<std::string>();
+		const std::string saltB64 = kdfJ.at("salt_b64").get<std::string>();
 		kdf_.salt = Crypto::b64decode(saltB64);
 		if (kdf_.salt.size() != crypto_pwhash_SALTBYTES) return false;
 
 
-		auto nonceB64 = root.at("nonce_b64").get<std::string>();
+		const std::string nonceB64 = root.at("nonce_b64").get<std::string>();
 		nonce = Crypto::b64decode(nonceB64);
 		if (nonce.size() != crypto_aead_xchacha20poly1305_ietf_NPUBBYTES) return false;
 
@@ -179,6 +191,3 @@ bool Vault::parseHeaderFromJson(const nlohmann::json& root) {
 	}
 }
 
-const std::vector<Entry>& Vault::getEntries() const {
-	return entries;
-}
