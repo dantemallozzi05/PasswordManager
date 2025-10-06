@@ -1,5 +1,5 @@
 #include "Vault.h"
-#include "crypto.h"
+#include "../include/crypto.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <iterator>
@@ -46,50 +46,80 @@ void Vault::addEntry(const Entry& entry) {
 }
 
 bool Vault::save() const {
-	if (!hasKey_) return false;
+	{
+		if (!hasKey_) {
+			lastError_ = "Key is not derived; call initNew() or load() first."; return false;
+		}
 
+	// serialize via plaintext
 	nlohmann::json arr = nlohmann::json::array();
 	for (const auto& e : entries) arr.push_back(e);
+	std::string plaintext = arr.dump();
+
 
 	const std::string plaintext = arr.dump();
+	const_cast<std::vector<unsigned char>&>(nonce) = Crypto::randomBytes(crypto_aead_xchacha20poly1305_ietf_PUBBYTES);
+	Crypto::randomBytes(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
+
 
 	//Emcrypt, attach to header
 	std::string ctB64;
-	if (!Crypto::encrypt(key, nonce, plaintext, ctB64)) return false;
+	if (!Crypto::encrypt(key, nonce, plaintext, ctB64)) {
+		lastError_ = "Encryption failed.";
+
+		if (!plaintext.empty()) Crypto::secureZero(plaintext.data(), plaintext.size());
+		return false;
+	}
+
 
 	nlohmann::json root = makeHeaderJson();
 	root["ciphertext_b64"] = ctB64;
 
-	return writeAllText(filePath, root.dump(2));
+	// write file
+	bool ok = writeAllText(filePath, root.dump(2));
+
+	// scrub plaintext
+	if (!plaintext.empty()) Crypto::secureZero(plaintext.data(), plaintext.size());
+
+	if (!ok) lastError_ = "Failed to write vault file.";
+	return ok;
 }
 
 bool Vault::load(const std::string& masterPassword) {
 	std::string text;
-	if (!readAllText(filePath, text)) return false;
+	if (!readAllText(filePath, text)) {
+		lastError_ = "Could not open vault file: " + filePath;
+		return false;
+	}
 
 	nlohmann::json root;
 	try { root = nlohmann::json::parse(text); }
-	catch (...) { return false; }
 
-	if (!parseHeaderFromJson(root)) return false;
-	if (!deriveKey(masterPassword)) return false;
+	catch (...) { lastError_ = "Vault is not valid JSON."; return false; }
+
+	if (!parseHeaderFromJson(root)) {
+		lastError_ = "Vault header is invalid (salt/nonce/version).";
+		return false;
+	}
+		
+	if (!derivieKey(masterPassword)) {
+		lastError_ = "Key derivation failed (argon2id).";
+		return false;
+	}
 
 	const std::string ctB64 = root.value("ciphertext_b64", "");
+
 	if (ctB64.empty()) { entries.clear(); return true; }
 
 	std::string plaintext;
 	if (!Crypto::decrypt(key, nonce, ctB64, plaintext)) {
+		lastError_ = "Decrypted data isn't valid JSON.";
+
+		if (!plaintext.empty()) Crypto::secureZero(plaintext.data(), plaintext.size());
 		return false;
 	}
 
-	try {
-		auto arr = nlohmann::json::parse(plaintext);
-		entries = arr.get<std::vector<Entry>>();
-	}
-	catch (...) {
-		return false;
-	}
-
+	if (!plaintext.empty()) Crypto::secureZero(plaintext.data(), plaintext.size());
 	return true;
 }
 

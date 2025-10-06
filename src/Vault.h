@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 #include <optional>
-#include "crypto.h"
+#include "../include/crypto.h"
 #include <nlohmann/json.hpp>
 
 // represents saved credential entry

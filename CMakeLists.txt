@@ -17,6 +17,10 @@ add_executable(PasswordManager
     "include/crypto.h"
  )
 
+ # Include Directories
+ target_include_directories(PasswordManager PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+
 # Link libraries
 target_link_libraries(PasswordManager PRIVATE
     unofficial-sodium::sodium
