@@ -7,7 +7,7 @@ Vault::Vault(const std::string& path, const std::string& masterPassword) : fileP
 	Crypto::KdfParams kdf;
 	kdf.salt = Crypto::randomBytes(crypto_pwhash_SALTBYTES);
 	Crypto::deriveKey(masterPassword, kdf, key);
-	nonce = Crypto::randomBytes(crypto_aead_schacha20poly1305_ietf_NPUBBYTES);
+	nonce = Crypto::randomBytes(crypto_aead_xchacha20poly1305_ietf_NPUBBYTES);
 
 }
 
@@ -35,8 +35,11 @@ bool Vault::load() {
 
 	std::string encrypted((std::istreambuf_iterator<char>(ifs)), {});
 	std::string plaintext;
-	if (!Crypto::decrypt(key, nonce, encrypted, plaintext))
+	if (!Crypto::decrypt(key, nonce, encrypted, plaintext)) {
 		return false;
+	}
+
+	return true;
 }
 
 std::vector<Entry> Vault::getEntries() const {
