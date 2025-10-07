@@ -144,18 +144,17 @@ static int cmd_list(const std::string& path) {
 
 	if (items.empty()) { std::cout << "(no entries)" << std::endl; userConfirm(); return 0; }
 
-	std::sort(items.begin(), items.end(), [](const Entry& a, const Entry& b) {
-		auto lower = [](const std::string& s) {
-			std::string t;
-			t.reserve(s.size());
+	std::sort(items.begin(), items.end(),
+		[](const Entry& a, const Entry& b) {
+			auto toLower = [](std::string s) {
+				for (char& c : s) {
+					c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+				}
+				return s;
+				};
+			return toLower(a.site) < toLower(b.site);
+		});
 
-			for (unsigned char ch : s) {
-				t.push_back(static_cast<char>(std::tolower(ch)));
-			}
-			return t;
-			};
-		return lower(a.site) < lower(b.site);
-	});
 
 	
 	for (const auto& e : items) {
@@ -194,6 +193,59 @@ static int cmd_del(const std::string& path) {
 	return 0;
 }
 
+static int cmd_find(const std::string& path) {
+	if (!std::filesystem::exists(path)) {
+		std::cerr << "No vault exists at " << path << ". Try initializing first." << std::endl;
+		userConfirm();
+		return 1;
+	}
+
+	Vault v(path);
+	std::string master = promptSecret("Enter master password: ");
+
+	if (!v.load(master)) { std::cerr << v.getLastError() << std::endl; userConfirm(); return 1; }
+	if (!master.empty()) Crypto::secureZero(master.data(), master.size());
+
+	std::string s = prompt("Starting letter (A-Z): ");
+
+	if (s.empty()) { std::cout << "No letter entered" << std::endl; userConfirm(); return 0; }
+	unsigned char ch = static_cast<unsigned char>(std::tolower(s[0]));
+
+	// store any matches with same letter
+	std::vector<Entry> matches;
+	for (const auto& e : v.getEntries()) {
+		if (!e.site.empty() && std::tolower(static_cast<unsigned char>(e.site[0])) == ch) {
+			matches.push_back(e);
+		}
+	}
+
+	if (matches.empty()) {
+		std::cout << "No entries start with '" << s[0] << "'." << std::endl;
+		userConfirm();
+		return 0;
+	}
+
+	std::sort(matches.begin(), matches.end(),
+		[](const Entry& a, const Entry& b) {
+			auto toLower = [](std::string s) {
+				for (char& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+				return s;
+				};
+			return toLower(a.site) < toLower(b.site);  // <-- return a bool
+		});
+
+
+	std::cout << "Accounts starting with '" << static_cast<char>(std::toupper(ch)) << "'."
+		<< std::endl;
+
+	for (const auto& e : matches) {
+		std::cout << e.site << " | " << e.username << " | " << e.password << std::endl;
+	}
+
+	userConfirm();
+	return 0;
+}
+
 static int menu() {
 	for (;;) {
 		std::cout << "=== PASSWORD VAULT ===" << std::endl
@@ -201,6 +253,7 @@ static int menu() {
 			<< "2) Add Entry" << std::endl
 			<< "3) List Entries" << std::endl
 			<< "4) Delete Entry" << std::endl
+			<< "5) Find        " << std::endl
 			<< "Q) Quit Application" << std::endl
 			<< "Choice: ";
 
@@ -227,13 +280,15 @@ static int menu() {
 		else if (choice == "4") {
 			cmd_del(path);
 		}
+		else if (choice == "5") {
+			cmd_find(path);
+		}
 		else {
 			std::cerr << "Unknown Choice" << std::endl;
 		}
 		std::cout << std::endl;
 	}
 }
-
 
 int main(int argc, char** argv) {
 	if (argc >= 2) {
@@ -243,6 +298,8 @@ int main(int argc, char** argv) {
 		if (cmd == "init") return cmd_init(path);
 		if (cmd == "add") return cmd_add(path);
 		if (cmd == "list") return cmd_list(path);
+		if (cmd == "del") return cmd_del(path);
+		if (cmd == "find") return cmd_find(path);
 
 		printUsage(argv[0]);
 		return 1;
