@@ -17,7 +17,6 @@ static std::string promptPathWithDefault(const std::string& label, const std::st
 	return p.string();                       // <-- RETURN IT
 }
 
-
 static std::string prompt(const std::string& label) {
 	std::cout << label;
 	std::string s;
@@ -54,7 +53,8 @@ static void printUsage(const char* exe) {
 	std::cout << "Usage: pm \n"
 		<< "  " << exe << " init <vault.json>\n"
 		<< "  " << exe << " add  <vault.json>\n"
-		<< "  " << exe << " list <vault.json>\n";
+		<< "  " << exe << " list <vault.json>\n"
+		<< "  " << exe << " del  <vault.json>\n";
 }
 
 static int cmd_init(const std::string& path) {
@@ -112,26 +112,70 @@ static int cmd_list(const std::string& path) {
 	return 0;
 }
 
+static int cmd_del(const std::string& path) {
+	if (!std::filesystem::exists(path)) {
+		std::cerr << "No vault exists at " << path << ". Try Initializing first." << std::endl;
+
+		return 1;
+	}
+
+	Vault v(path);
+	std::string master = promptSecret("Enter master password: ");
+
+	if (!v.load(master)) { std::cerr << v.getLastError() << std::endl; return 1; }
+	if (!master.empty()) Crypto::secureZero(master.data(), master.size());
+
+	std::string site = prompt("Site to delete (exact match): ");
+	const size_t removed = v.removeBySite(site);
+
+	if (removed == 0) {
+		std::cout << "No entries matched " << site << std::endl;
+		return 0;
+	}
+
+	if (!v.save()) { std::cerr << v.getLastError() << std::endl; return 1; }
+	std::cout << "Successfully deleted " << removed << "entr" << (removed == 1 ? "y" : "ies") << std::endl;
+	return 0;
+}
+
 static int menu() {
-	std::cout << "=== Password Vault ===" << std::endl
-		<< "1) Initialize Vault" << std::endl
-		<< "2) Add entry" << std::endl
-		<< "3) List entries" << std::endl
-		<< "Choice: ";
+	for (;;) {
+		std::cout << "=== PASSWORD VAULT ===" << std::endl
+			<< "1) Initialize Vault" << std::endl
+			<< "2) Add Entry" << std::endl
+			<< "3) List Entries" << std::endl
+			<< "4) Delete Entry" << std::endl
+			<< "Q) Quit Application" << std::endl
+			<< "Choice: ";
 
-	int c = 0;
-	if (!(std::cin >> c)) return 1;
-	std::cin.ignore(static_cast<std::streamsize>(std::numeric_limits<std::streamsize>::max()), '\n');
+		std::string choice;
 
-	std::string path = prompt("Vault path (default: vault.json): ");
-	if (path.empty()) path = "vault.json";
+		if (!std::getline(std::cin, choice)) return 1;
 
-	if (c == 1) return cmd_init(path);
-	if (c == 2) return cmd_add(path);
-	if (c == 3) return cmd_list(path);
+		if (choice == "q" || choice == "Q") {
+			std::cout << "Goodbye";
+			return 0;
+		}
 
-	std::cerr << "Unknown choice";
-	return 1;
+		std::string path = promptPathWithDefault("Vault path (default: vault.json): ", "vault.json");
+
+		if (choice == "1") {
+			cmd_init(path);
+		}
+		else if (choice == "2") {
+			cmd_add(path);
+		} 
+		else if (choice == "3") {
+			cmd_list(path);
+		}
+		else if (choice == "4") {
+			cmd_del(path);
+		}
+		else {
+			std::cerr << "Unknown Choice" << std::endl;
+		}
+		std::cout << std::endl;
+	}
 }
 
 
