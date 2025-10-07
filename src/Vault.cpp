@@ -4,6 +4,8 @@
 #include <fstream>
 #include <iterator>
 #include <sodium.h>
+#include <algorithm>
+
 
 // Read entire file contents into secure string
 static bool readAllText(const std::string& path, std::string& out) {
@@ -209,3 +211,18 @@ bool Vault::parseHeaderFromJson(const nlohmann::json& root) {
 	}
 }
 
+// remove an entry from encrypted vault securely and terminate information.
+size_t Vault::removeBySite(const std::string& site) {
+	auto first_to_remove = std::remove_if(entries.begin(), entries.end(), [&](const Entry& e) { return e.site == site;  });
+	size_t removed = static_cast<size_t>(std::distance(first_to_remove, entries.end()));
+
+	// scrub metadata before deletion
+	for (auto it = first_to_remove; it != entries.end(); ++it) {
+		if (!it->password.empty()) {
+			Crypto::secureZero(it->password.data(), it->password.size());
+		}
+	}
+	entries.erase(first_to_remove, entries.end());
+
+	return removed;
+}

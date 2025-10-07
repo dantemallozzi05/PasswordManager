@@ -70,4 +70,6 @@ public:
 
 	const std::string& getLastError() const { return lastError_; }
 
+	size_t removeBySite(const std::string& site);
+
 };
