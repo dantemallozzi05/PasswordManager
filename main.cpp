@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <algorithm>
+#include <cctype>
 
 #if defined(_WIN32)
 #include <conio.h>
@@ -123,18 +125,41 @@ static int cmd_add(const std::string& path) {
 }
 
 static int cmd_list(const std::string& path) {
+
+	if (!std::filesystem::exists(path)) {
+		std::cerr << "No vault exists at " << path << ". Try init first." << std::endl;
+
+		userConfirm();
+		return 1;
+	}
+
+
 	Vault v(path);
 
 	std::string master = promptSecret("Enter master password: ");
 	if (!v.load(master)) { std::cerr << v.getLastError() << std::endl; userConfirm(); return -1; }
 	if (!master.empty()) Crypto::secureZero(const_cast<char*>(master.data()), master.size());
 
-	const auto& items = v.getEntries();
+	std::vector<Entry> items = v.getEntries();
 
 	if (items.empty()) { std::cout << "(no entries)" << std::endl; userConfirm(); return 0; }
 
+	std::sort(items.begin(), items.end(), [](const Entry& a, const Entry& b) {
+		auto lower = [](const std::string& s) {
+			std::string t;
+			t.reserve(s.size());
+
+			for (unsigned char ch : s) {
+				t.push_back(static_cast<char>(std::tolower(ch)));
+			}
+			return t;
+			};
+		return lower(a.site) < lower(b.site);
+	});
+
+	
 	for (const auto& e : items) {
-		std::cout << e.site << " | " << e.username << " | " << e.password << std::endl;
+		std::cout << e.site << " | " << e.username << " | " << e.password << std::endl << std::endl;
 	}
 
 	userConfirm();
